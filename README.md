@@ -74,7 +74,7 @@ Enable repo-created notifications:
 
 Configure Slack notification (pick one):
 
-- Slack bot: `SLACK_BOT_TOKEN=...` + `SLACK_CHANNEL_ID=C0A8ZSYDHJ8`
+- Slack bot: `SLACK_BOT_TOKEN=...` + `SLACK_CHANNEL_ID=C0A8ZSYDHJ8` (bot must be in the channel; the app can also auto-join if it has `channels:join`)
 - Incoming webhook: `SLACK_WEBHOOK_URL=...`
 
 ## Stale cleanup

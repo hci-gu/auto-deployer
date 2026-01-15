@@ -79,6 +79,22 @@ func (c *Client) sendWebhook(ctx context.Context, text string) error {
 }
 
 func (c *Client) sendChatPostMessage(ctx context.Context, text string) error {
+	if err := c.postMessage(ctx, text); err == nil {
+		return nil
+	} else if !strings.Contains(err.Error(), "not_in_channel") {
+		return err
+	}
+
+	// Try to join the channel and retry once. This requires Slack scopes:
+	// - public channels: channels:join
+	// - private channels: groups:write (or invite the bot manually)
+	if err := c.joinChannel(ctx); err != nil {
+		return fmt.Errorf("postMessage error: not_in_channel (also failed to join: %w)", err)
+	}
+	return c.postMessage(ctx, text)
+}
+
+func (c *Client) postMessage(ctx context.Context, text string) error {
 	payload := map[string]string{
 		"channel": c.channelID,
 		"text":    text,
@@ -114,6 +130,47 @@ func (c *Client) sendChatPostMessage(ctx context.Context, text string) error {
 	if err := json.Unmarshal(bodyBytes, &parsed); err == nil {
 		if !parsed.OK {
 			return fmt.Errorf("postMessage error: %s", parsed.Error)
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) joinChannel(ctx context.Context) error {
+	payload := map[string]string{
+		"channel": c.channelID,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal join payload: %w", err)
+	}
+
+	url := apiBaseURL + "/conversations.join"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("create join request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.botToken)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("send join request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<10))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("join failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+
+	var parsed struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(bodyBytes, &parsed); err == nil {
+		if !parsed.OK {
+			return fmt.Errorf("join error: %s", parsed.Error)
 		}
 	}
 
