@@ -8,6 +8,8 @@ Preview controller for creating per-PR deployments in OpenShift.
 export LISTEN_ADDR=":8080"
 export GITHUB_WEBHOOK_SECRET=... 
 export GITHUB_ALLOWED_REPOS="org1/repoA,org1/repoB"
+export GITHUB_TOKEN="..."                              # optional; enables PR comments
+export GITHUB_API_BASE_URL="https://api.github.com"    # optional for GHE
 export PREVIEW_NAMESPACE_MODE="single"         # single|per-app|per-pr
 export PREVIEW_BASE_NAMESPACE="previews"       # required for single/per-app
 export ROUTE_DOMAIN_TEMPLATE="{app}-pr-{pr}.apps.internal.example.com"
@@ -48,14 +50,6 @@ Example:
     }
   }
 }
-```
-
-## Deploy to OpenShift
-
-Manifest: `deploy/preview-controller.yaml`
-
-```
-oc apply -f deploy/preview-controller.yaml
 ```
 
 ## Webhook endpoint

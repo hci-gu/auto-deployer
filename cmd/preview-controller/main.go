@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -52,6 +54,13 @@ func main() {
 	webhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if webhookSecret == "" {
 		logger.Warn("GITHUB_WEBHOOK_SECRET is empty; webhook verification will always fail")
+	}
+
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	githubAPIBaseURL := os.Getenv("GITHUB_API_BASE_URL")
+	githubClient := github.NewClient(githubToken, githubAPIBaseURL)
+	if githubToken == "" {
+		logger.Info("GITHUB_TOKEN is empty; PR comments are disabled")
 	}
 
 	allowedReposRaw := os.Getenv("GITHUB_ALLOWED_REPOS")
@@ -129,7 +138,7 @@ func main() {
 
 	jobCh := make(chan previewJob, queueSize)
 	var workerWG sync.WaitGroup
-	startPreviewWorkers(ctx, &workerWG, logger, client, jobCh, workerCount)
+	startPreviewWorkers(ctx, &workerWG, logger, client, githubClient, jobCh, workerCount)
 
 	if staleCleanupEnabled {
 		startStaleCleanupLoop(ctx, logger, client, envConfig.NamespaceMode, staleMaxAge, staleCleanupInterval)
@@ -337,7 +346,7 @@ func main() {
 	logger.Info("http server stopped")
 }
 
-func startPreviewWorkers(ctx context.Context, wg *sync.WaitGroup, logger *slog.Logger, client *openshift.Client, jobs <-chan previewJob, count int) {
+func startPreviewWorkers(ctx context.Context, wg *sync.WaitGroup, logger *slog.Logger, client *openshift.Client, githubClient *github.Client, jobs <-chan previewJob, count int) {
 	for i := 0; i < count; i++ {
 		workerID := i + 1
 		wg.Add(1)
@@ -350,7 +359,7 @@ func startPreviewWorkers(ctx context.Context, wg *sync.WaitGroup, logger *slog.L
 					"pr", job.previewCfg.PRNumber,
 					"sha", job.headSHA,
 				)
-				processPreviewJob(ctx, jobLogger, client, job)
+				processPreviewJob(ctx, jobLogger, client, githubClient, job)
 			}
 		}()
 	}
@@ -422,7 +431,7 @@ func enqueueJob(logger *slog.Logger, jobs chan<- previewJob, job previewJob) boo
 	}
 }
 
-func processPreviewJob(ctx context.Context, logger *slog.Logger, client *openshift.Client, job previewJob) {
+func processPreviewJob(ctx context.Context, logger *slog.Logger, client *openshift.Client, githubClient *github.Client, job previewJob) {
 	switch job.action {
 	case "opened", "reopened", "synchronize":
 		if job.buildImages {
@@ -447,6 +456,7 @@ func processPreviewJob(ctx context.Context, logger *slog.Logger, client *openshi
 			"namespace", job.previewCfg.Namespace,
 			"route", job.previewCfg.RouteHost,
 		)
+		postPreviewComment(ctx, logger, githubClient, job.previewCfg)
 	case "closed":
 		deleteCtx, deleteCancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer deleteCancel()
@@ -460,4 +470,46 @@ func processPreviewJob(ctx context.Context, logger *slog.Logger, client *openshi
 	default:
 		logger.Info("pull_request action ignored", "action", job.action)
 	}
+}
+
+func postPreviewComment(ctx context.Context, logger *slog.Logger, githubClient *github.Client, cfg reconcile.PreviewConfig) {
+	if githubClient == nil {
+		return
+	}
+
+	previewURL, err := previewURL(cfg.RouteHost, cfg.RoutePath)
+	if err != nil {
+		logger.Error("preview URL render failed", "error", err)
+		return
+	}
+
+	commentBody := fmt.Sprintf("Preview deployment ready: %s", previewURL)
+	commentCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := githubClient.CreatePRComment(commentCtx, cfg.RepoFullName, cfg.PRNumber, commentBody); err != nil {
+		logger.Error("github comment failed", "error", err)
+		return
+	}
+	logger.Info("github comment posted", "url", previewURL)
+}
+
+func previewURL(routeHost, routePath string) (string, error) {
+	if strings.TrimSpace(routeHost) == "" {
+		return "", fmt.Errorf("route host is empty")
+	}
+
+	base := strings.TrimSpace(routeHost)
+	if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+		base = "https://" + base
+	}
+
+	path := strings.TrimSpace(routePath)
+	if path == "" || path == "/" {
+		return base, nil
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	return base + path, nil
 }
