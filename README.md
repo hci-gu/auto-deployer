@@ -64,9 +64,10 @@ oc apply -f deploy/preview-controller.yaml
 
 ## Stale cleanup
 
-To remove deployments for stale PRs, run the controller in cleanup mode (intended for a Kubernetes/OpenShift CronJob):
+The controller periodically cleans up previews that haven't been updated recently (to handle stale PRs).
 
-- `RUN_MODE=cleanup`
+- `STALE_CLEANUP_ENABLED=true` (optional; defaults to true)
+- `STALE_CLEANUP_INTERVAL=24h` (optional)
 - `STALE_MAX_AGE=168h` (optional; defaults to 7 days)
 
 Cleanup deletes previews based on the deployment annotation `preview-controller/last-updated-at` (falls back to `preview-controller/created-at`).
