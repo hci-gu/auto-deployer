@@ -92,6 +92,25 @@ func main() {
 		return
 	}
 
+	staleCleanupEnabled := true
+	if raw := os.Getenv("STALE_CLEANUP_ENABLED"); raw != "" {
+		staleCleanupEnabled = raw == "true"
+	}
+
+	staleMaxAge := 7 * 24 * time.Hour
+	if raw := os.Getenv("STALE_MAX_AGE"); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			staleMaxAge = parsed
+		}
+	}
+
+	staleCleanupInterval := 24 * time.Hour
+	if raw := os.Getenv("STALE_CLEANUP_INTERVAL"); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			staleCleanupInterval = parsed
+		}
+	}
+
 	queueSize := 20
 	if raw := os.Getenv("PREVIEW_QUEUE_SIZE"); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
@@ -111,6 +130,10 @@ func main() {
 	jobCh := make(chan previewJob, queueSize)
 	var workerWG sync.WaitGroup
 	startPreviewWorkers(ctx, &workerWG, logger, client, jobCh, workerCount)
+
+	if staleCleanupEnabled {
+		startStaleCleanupLoop(ctx, logger, client, envConfig.NamespaceMode, staleMaxAge, staleCleanupInterval)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook/github", func(w http.ResponseWriter, r *http.Request) {
@@ -331,6 +354,53 @@ func startPreviewWorkers(ctx context.Context, wg *sync.WaitGroup, logger *slog.L
 			}
 		}()
 	}
+}
+
+func startStaleCleanupLoop(ctx context.Context, logger *slog.Logger, client *openshift.Client, namespaceMode string, maxAge, interval time.Duration) {
+	logger.Info("stale cleanup enabled",
+		"max_age", maxAge.String(),
+		"interval", interval.String(),
+	)
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		run := func() {
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cleanupCancel()
+
+			result, err := reconcile.CleanupStalePreviews(cleanupCtx, client, namespaceMode, maxAge, time.Now().UTC())
+			if err != nil {
+				logger.Error("stale preview cleanup failed", "error", err)
+				return
+			}
+			logger.Info("stale preview cleanup finished",
+				"checked_deployments", result.CheckedDeployments,
+				"deleted_previews", result.DeletedPreviews,
+				"skipped_deployments", result.SkippedDeployments,
+			)
+		}
+
+		timer := time.NewTimer(30 * time.Second)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			run()
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				run()
+			}
+		}
+	}()
 }
 
 func enqueueJob(logger *slog.Logger, jobs chan<- previewJob, job previewJob) bool {
