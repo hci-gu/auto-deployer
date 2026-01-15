@@ -1,0 +1,37 @@
+.env
+.env.*
+!.env.example
+
+# Go build/test artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.coverprofile
+coverage*.out
+
+# Build output directories
+/bin/
+/dist/
+/out/
+/tmp/
+
+# Go workspace files
+/go.work
+/go.work.sum
+
+# Local Go caches (repo-local)
+/.gocache
+/.gocache/
+/.gomodcache
+/.gomodcache/
+/.gopath
+/.gopath/
+
+# Editor/OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store

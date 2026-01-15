@@ -1,0 +1,6 @@
+{
+  "hci-gu/hci-gu.github.io": {
+    "appName": "hci-gu-se",
+    "containerPort": 3000
+  }
+}
