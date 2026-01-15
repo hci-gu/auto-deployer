@@ -220,6 +220,7 @@ func buildSlackMessage(clonePath string, payload github.PullRequestEvent) string
 		"Instructions:",
 		"- Check out the folder above.",
 		"- Follow DEPLOYMENT_INSTRUCTIONS.md to deploy to OpenShift.",
+		"- The openshift env variables are all in your root folder NOT the checked out repository. ( same as DEPLOYMENT_INSTRUCTIONS.md )",
 		"- Decide any repo-specific deployment steps and execute them.",
 		"",
 		"Additional context (PR title + body):",
