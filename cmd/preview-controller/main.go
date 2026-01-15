@@ -37,6 +37,11 @@ type previewJob struct {
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
 
+	runMode := os.Getenv("RUN_MODE")
+	if runMode == "" {
+		runMode = "server"
+	}
+
 	dotenvPath := os.Getenv("ENV_FILE")
 	if dotenvPath == "" {
 		dotenvPath = ".env"
@@ -89,6 +94,30 @@ func main() {
 	client, err := openshift.NewClientFromEnv()
 	if err != nil {
 		logger.Error("failed to create OpenShift client", "error", err)
+		return
+	}
+
+	if runMode == "cleanup" {
+		maxAge := 7 * 24 * time.Hour
+		if raw := os.Getenv("STALE_MAX_AGE"); raw != "" {
+			if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+				maxAge = parsed
+			}
+		}
+
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cleanupCancel()
+
+		result, err := reconcile.CleanupStalePreviews(cleanupCtx, client, envConfig.NamespaceMode, maxAge, time.Now().UTC())
+		if err != nil {
+			logger.Error("stale preview cleanup failed", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("stale preview cleanup finished",
+			"checked_deployments", result.CheckedDeployments,
+			"deleted_previews", result.DeletedPreviews,
+			"skipped_deployments", result.SkippedDeployments,
+		)
 		return
 	}
 

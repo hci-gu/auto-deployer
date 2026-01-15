@@ -117,6 +117,36 @@ spec:
   port:
     targetPort: http
 ---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: preview-controller-cleanup
+  namespace: preview-controller
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: preview-controller
+          restartPolicy: Never
+          containers:
+            - name: cleanup
+              image: your-registry/preview-controller:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: RUN_MODE
+                  value: "cleanup"
+                - name: STALE_MAX_AGE
+                  value: "168h"
+                - name: PREVIEW_NAMESPACE_MODE
+                  value: "single"
+                - name: PREVIEW_BASE_NAMESPACE
+                  value: "previews"
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:

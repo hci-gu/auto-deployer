@@ -62,6 +62,15 @@ oc apply -f deploy/preview-controller.yaml
 
 `POST /webhook/github` expects a GitHub webhook with `pull_request` events (opened/reopened/synchronize/closed).
 
+## Stale cleanup
+
+To remove deployments for stale PRs, run the controller in cleanup mode (intended for a Kubernetes/OpenShift CronJob):
+
+- `RUN_MODE=cleanup`
+- `STALE_MAX_AGE=168h` (optional; defaults to 7 days)
+
+Cleanup deletes previews based on the deployment annotation `preview-controller/last-updated-at` (falls back to `preview-controller/created-at`).
+
 ## Health
 
 - `GET /healthz`
