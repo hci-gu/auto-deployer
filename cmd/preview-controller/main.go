@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -209,15 +208,14 @@ func buildSlackMessage(clonePath string, payload github.PullRequestEvent) string
 	}
 	contextText = truncate(contextText, maxContextChars)
 
-	instructionsPath := filepath.Join(clonePath, "DEPLOYMENT_INSTRUCTIONS.md")
-
 	lines := []string{
+		fmt.Sprintf("Ping @HCI-Bot"),
 		fmt.Sprintf("PR opened: %s#%d", repo.FullName, pr.Number),
 		fmt.Sprintf("URL: %s", pr.URL),
 		fmt.Sprintf("Branch: %s", pr.Head.Ref),
 		fmt.Sprintf("SHA: %s", shortSHA),
 		fmt.Sprintf("Local path: %s", clonePath),
-		fmt.Sprintf("Deployment instructions: %s", instructionsPath),
+		fmt.Sprintf("Deployment instructions: %s", "/clawd/DEPLOYMENT_INSTRUCTIONS.md"),
 		"",
 		"Instructions:",
 		"- Check out the folder above.",
