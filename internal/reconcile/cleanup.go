@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"auto-deployer/internal/openshift"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -31,7 +31,7 @@ type previewIdentity struct {
 }
 
 func CleanupStalePreviews(ctx context.Context, client *openshift.Client, namespaceMode string, maxAge time.Duration, now time.Time) (CleanupResult, error) {
-	deployments, err := client.Kube.AppsV1().Deployments("").List(ctx, v1.ListOptions{LabelSelector: labelPreviewEnabled + "=true"})
+	deployments, err := client.Kube.AppsV1().Deployments("").List(ctx, metav1.ListOptions{LabelSelector: labelPreviewEnabled + "=true"})
 	if err != nil {
 		return CleanupResult{}, fmt.Errorf("list deployments: %w", err)
 	}
