@@ -60,7 +60,22 @@ oc apply -f deploy/preview-controller.yaml
 
 ## Webhook endpoint
 
-`POST /webhook/github` expects a GitHub webhook with `pull_request` events (opened/reopened/synchronize/closed).
+`POST /webhook/github` expects GitHub webhooks.
+
+- `pull_request` events (opened/reopened/synchronize/closed) create/update/delete previews.
+- `repository` events (created) can notify Slack so an agent can review the new repo and decide whether to add it to `GITHUB_ALLOWED_REPOS` + `config/app-mapping.json`.
+
+### Repository-created notifications
+
+Enable repo-created notifications:
+
+- `GITHUB_REPO_EVENTS_ENABLED=true`
+- `GITHUB_REPO_EVENTS_ALLOWED_ORGS=hci-gu` (csv)
+
+Configure Slack notification (pick one):
+
+- Slack bot: `SLACK_BOT_TOKEN=...` + `SLACK_CHANNEL_ID=C0A8ZSYDHJ8`
+- Incoming webhook: `SLACK_WEBHOOK_URL=...`
 
 ## Stale cleanup
 

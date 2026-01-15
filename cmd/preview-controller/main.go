@@ -18,6 +18,7 @@ import (
 	"auto-deployer/internal/github"
 	"auto-deployer/internal/openshift"
 	"auto-deployer/internal/reconcile"
+	"auto-deployer/internal/slack"
 )
 
 const (
@@ -57,12 +58,24 @@ func main() {
 	allowedReposRaw := os.Getenv("GITHUB_ALLOWED_REPOS")
 	allowedRepos := github.ParseAllowedRepos(allowedReposRaw)
 	if len(allowedRepos) == 0 {
-		logger.Warn("GITHUB_ALLOWED_REPOS is empty; all webhook requests will be rejected")
+		logger.Warn("GITHUB_ALLOWED_REPOS is empty; all pull_request webhook requests will be rejected")
+	}
+
+	repoEventsEnabled := os.Getenv("GITHUB_REPO_EVENTS_ENABLED") == "true"
+	repoEventsAllowedOrgs := github.ParseAllowedOrgs(os.Getenv("GITHUB_REPO_EVENTS_ALLOWED_ORGS"))
+	if repoEventsEnabled && len(repoEventsAllowedOrgs) == 0 {
+		logger.Warn("GITHUB_REPO_EVENTS_ALLOWED_ORGS is empty; repository events will be rejected")
 	}
 
 	rejectForks := os.Getenv("GITHUB_REJECT_FORKS") == "true"
 	keepOnMerge := os.Getenv("KEEP_ON_MERGE") == "true"
 	buildImages := os.Getenv("IMAGE_BUILD_ENABLED") == "true"
+
+	slackClient := slack.NewClient(
+		os.Getenv("SLACK_WEBHOOK_URL"),
+		os.Getenv("SLACK_BOT_TOKEN"),
+		os.Getenv("SLACK_CHANNEL_ID"),
+	)
 	dockerfilePath := os.Getenv("IMAGE_BUILD_DOCKERFILE")
 	buildPlatform := os.Getenv("IMAGE_BUILD_PLATFORM")
 	useBuildx := true
@@ -278,6 +291,56 @@ func main() {
 			default:
 				logger.Info("pull_request action ignored", "action", payload.Action)
 				w.WriteHeader(http.StatusAccepted)
+				return
+			}
+		case github.EventRepository:
+			if !repoEventsEnabled {
+				logger.Info("repository events disabled")
+				w.WriteHeader(http.StatusAccepted)
+				return
+			}
+
+			payload, err := github.ParseRepositoryEvent(body)
+			if err != nil {
+				logger.Error("repository parse failed", "error", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if payload.Action != "created" {
+				logger.Info("repository action ignored", "action", payload.Action)
+				w.WriteHeader(http.StatusAccepted)
+				return
+			}
+
+			if !github.OrgAllowed(repoEventsAllowedOrgs, payload.Repository.FullName) {
+				logger.Warn("repository org not allowed", "repo", payload.Repository.FullName)
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+
+			if slackClient == nil {
+				logger.Warn("slack client not configured; cannot notify", "repo", payload.Repository.FullName)
+				w.WriteHeader(http.StatusAccepted)
+				return
+			}
+
+			desc := payload.Repository.Description
+			if desc == "" {
+				desc = "(no description)"
+			}
+
+			msg := "New GitHub repo created: `" + payload.Repository.FullName + "`\n" +
+				"URL: " + payload.Repository.HTMLURL + "\n" +
+				"Creator: " + payload.Sender.Login + "\n" +
+				"Description: " + desc + "\n\n" +
+				"Should I add this repo to auto-deployer (`GITHUB_ALLOWED_REPOS` + `config/app-mapping.json`)?"
+
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := slackClient.SendMessage(notifyCtx, msg); err != nil {
+				logger.Error("slack notify failed", "error", err)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 		default:

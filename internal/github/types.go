@@ -6,10 +6,24 @@ type PullRequestEvent struct {
 	PullRequest PR     `json:"pull_request"`
 }
 
+type RepositoryEvent struct {
+	Action     string `json:"action"`
+	Repository Repo    `json:"repository"`
+	Sender     User    `json:"sender"`
+}
+
 type Repo struct {
-	FullName string `json:"full_name"`
-	CloneURL string `json:"clone_url"`
-	SSHURL   string `json:"ssh_url"`
+	FullName    string `json:"full_name"`
+	CloneURL    string `json:"clone_url"`
+	SSHURL      string `json:"ssh_url"`
+	HTMLURL     string `json:"html_url"`
+	Private     bool   `json:"private"`
+	Archived    bool   `json:"archived"`
+	Description string `json:"description"`
+}
+
+type User struct {
+	Login string `json:"login"`
 }
 
 type PR struct {
