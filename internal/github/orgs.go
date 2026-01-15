@@ -16,7 +16,7 @@ func ParseAllowedOrgs(raw string) map[string]struct{} {
 
 func OrgAllowed(allowed map[string]struct{}, repoFullName string) bool {
 	if len(allowed) == 0 {
-		return false
+		return true
 	}
 	parts := strings.SplitN(repoFullName, "/", 3)
 	if len(parts) != 2 {

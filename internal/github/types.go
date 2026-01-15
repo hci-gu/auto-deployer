@@ -6,12 +6,6 @@ type PullRequestEvent struct {
 	PullRequest PR     `json:"pull_request"`
 }
 
-type RepositoryEvent struct {
-	Action     string `json:"action"`
-	Repository Repo    `json:"repository"`
-	Sender     User    `json:"sender"`
-}
-
 type Repo struct {
 	FullName    string `json:"full_name"`
 	CloneURL    string `json:"clone_url"`
@@ -20,6 +14,7 @@ type Repo struct {
 	Private     bool   `json:"private"`
 	Archived    bool   `json:"archived"`
 	Description string `json:"description"`
+	Owner       User   `json:"owner"`
 }
 
 type User struct {
@@ -35,6 +30,7 @@ type PR struct {
 	User   PRUser    `json:"user"`
 	URL    string    `json:"html_url"`
 	Title  string    `json:"title"`
+	Body   string    `json:"body"`
 	Draft  bool      `json:"draft"`
 	Labels []PRLabel `json:"labels"`
 }
